@@ -4,28 +4,62 @@ from telebot import types
 from django.http import HttpResponse, HttpResponseForbidden
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
-from .models import Bot, Lead # Импортируем наши модели для работы с базой данных
+from .models import Bot, Lead
 
 # --- Инициализация ---
 bot = telebot.TeleBot(settings.TELEGRAM_BOT_TOKEN, threaded=False)
-# Словарь для временного хранения состояния диалога с пользователями
-user_data = {} 
+user_data = {}
 
-# --- Тексты на двух языках ---
+# --- Тексты на двух языках (Полная версия) ---
 texts = {
     'ru': {
         'welcome': "Здравствуйте!\nДля продолжения, пожалуйста, выберите язык общения.",
         'menu_prompt': "Я ваш цифровой ассистент. Чем могу помочь?",
+        # --- Кнопки меню ---
+        'menu_what_bots_can_do': "Узнать, что умеют чат-боты",
+        'menu_see_example': "Посмотреть пример работы",
         'menu_discuss_project': "Обсудить мой проект",
+        'menu_prices': "Узнать примерные цены",
+        # --- Ответы на кнопки меню ---
+        'reply_what_bots_can_do': (
+            "Наши чат-боты — это полноценные виртуальные сотрудники, которые умеют:\n\n"
+            "✅ *Принимать заказы:* для ресторанов, кафе и магазинов.\n"
+            "✅ *Записывать на услуги:* для салонов красоты, клиник, автосервисов.\n"
+            "✅ *Консультировать:* отвечать на 90% частых вопросов о ценах, адресе, услугах.\n"
+            "✅ *Собирать заявки:* и моментально сохранять их в CRM-системе."
+        ),
+        'reply_see_example': (
+            "Отличный выбор! Вместо тысячи слов — один наглядный пример.\n\n"
+            "Представьте бота для ресторана:\n"
+            "1️⃣ Клиент видит кнопки: 'Меню', 'Заказ', 'Бронь'.\n"
+            "2️⃣ Нажимает 'Меню', видит категории: 'Салаты', 'Горячее'.\n"
+            "3️⃣ Выбирает блюдо, добавляет в корзину.\n"
+            "4️⃣ Нажимает 'Оформить заказ', пишет адрес и телефон.\n\n"
+            "Всё! Заказ моментально появляется в вашей админ-панели. Просто, быстро и 24/7."
+        ),
+        'reply_prices': (
+            "Стоимость зависит от сложности задач. Вот наши базовые пакеты:\n\n"
+            "🔹 *'Старт' (450 - 2000 сомони):* Бот-визитка с информацией о компании и ответами на частые вопросы (FAQ).\n\n"
+            "🔹 *'Бизнес' (2000 - 4000 сомони):* Бот с функцией онлайн-записи или приема простых заказов.\n\n"
+            "🔹 *'Профи' (от 4000 сомони):* Сложный бот с интеграцией с вашей CRM-системой или базой данных."
+        ),
+        # --- Сбор заявки ---
         'ask_name': "Отлично! Как я могу к вам обращаться?",
-        'ask_business': "Приятно познакомиться, {}!\nРасскажите коротко о вашем бизнесе (например, 'кафе').",
+        'ask_business': "Приятно познакомиться, {}!\nРасскажите коротко о вашем бизнесе (например, 'кафе', 'магазин').",
         'ask_task': "Спасибо! Какую главную задачу вы бы хотели поручить боту?",
         'final_thanks': "Превосходно! Спасибо за ответы. Ваша заявка сохранена. Наш руководитель скоро свяжется с вами.",
     },
+    # --- Таджикские тексты (можно дополнить по аналогии) ---
     'tj': {
         'welcome': "Ассалому алейкум!\nБарои идома, лутфан забони муоширатро интихоб кунед.",
         'menu_prompt': "Ман ёрдамчии рақамии шумо. Чӣ хизмат карда метавонам?",
+        'menu_what_bots_can_do': "Чат-ботҳо чӣ кор карда метавонанд",
+        'menu_see_example': "Намунаи корро дидан",
         'menu_discuss_project': "Лоиҳаи худро муҳокима кардан",
+        'menu_prices': "Нархҳои тахминиро фаҳмидан",
+        'reply_what_bots_can_do': "...",
+        'reply_see_example': "...",
+        'reply_prices': "...",
         'ask_name': "Олӣ! Ба шумо чӣ тавр муроҷиат кунам?",
         'ask_business': "Аз шиносоӣ бо шумо шодам, {}!\nДар бораи тиҷорати худ мухтасар нақл кунед.",
         'ask_task': "Ташаккур! Кадом вазифаи асосиро ба бот супоридан мехоҳед?",
@@ -34,7 +68,7 @@ texts = {
 }
 
 
-# --- ОБРАБОТЧИКИ КОМАНД И СООБЩЕНИЙ (Вся логика бота здесь) ---
+# --- ОБРАБОТЧИКИ ---
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -54,22 +88,41 @@ def handle_language_selection(call):
     user_data[user_id] = {'lang': lang}
     bot.answer_callback_query(call.id)
     bot.delete_message(chat_id=user_id, message_id=call.message.message_id)
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    markup.add(texts[lang]['menu_discuss_project'])
+    
+    # --- ИСПРАВЛЕННЫЙ БЛОК СОЗДАНИЯ МЕНЮ ---
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+    markup.add(
+        types.KeyboardButton(texts[lang]['menu_what_bots_can_do']),
+        types.KeyboardButton(texts[lang]['menu_see_example']),
+        types.KeyboardButton(texts[lang]['menu_prices']),
+        types.KeyboardButton(texts[lang]['menu_discuss_project'])
+    )
+    # ----------------------------------------
     bot.send_message(user_id, texts[lang]['menu_prompt'], reply_markup=markup)
 
 @bot.message_handler(func=lambda message: True)
 def handle_text(message):
     user_id = message.chat.id
+    text = message.text
     if user_id not in user_data or 'lang' not in user_data[user_id]:
         send_welcome(message)
         return
     lang = user_data[user_id]['lang']
-    if message.text == texts[lang]['menu_discuss_project']:
+    
+    # --- ИСПРАВЛЕННЫЙ БЛОК ОБРАБОТКИ МЕНЮ ---
+    if text == texts[lang]['menu_what_bots_can_do']:
+        bot.send_message(user_id, texts[lang]['reply_what_bots_can_do'], parse_mode="Markdown")
+    elif text == texts[lang]['menu_see_example']:
+        bot.send_message(user_id, texts[lang]['reply_see_example'], parse_mode="Markdown")
+    elif text == texts[lang]['menu_prices']:
+        bot.send_message(user_id, texts[lang]['reply_prices'], parse_mode="Markdown")
+    elif text == texts[lang]['menu_discuss_project']:
         msg = bot.send_message(user_id, texts[lang]['ask_name'], reply_markup=types.ReplyKeyboardRemove())
         bot.register_next_step_handler(msg, process_name_step)
+    # ----------------------------------------
 
 def process_name_step(message):
+    # (Этот и следующие шаги остаются без изменений)
     user_id = message.chat.id
     user_data[user_id]['name'] = message.text
     lang = user_data[user_id]['lang']
@@ -87,43 +140,20 @@ def process_task_step(message):
     user_id = message.chat.id
     user_data[user_id]['task'] = message.text
     lang = user_data[user_id]['lang']
-    
-    # --- ИНТЕГРАЦИЯ С БАЗОЙ ДАННЫХ ---
     try:
-        # Находим в админке нашего бота по его токену
         bot_instance = Bot.objects.get(token=settings.TELEGRAM_BOT_TOKEN)
-        
         name = user_data[user_id].get('name', 'Не указано')
         business = user_data[user_id].get('business', 'Не указано')
         task = user_data[user_id].get('task', 'Не указано')
-        
-        full_lead_data = (
-            f"Бизнес: {business}\n"
-            f"Задача: {task}\n"
-            f"Язык: {'Русский' if lang == 'ru' else 'Тоҷикӣ'}"
-        )
-        
-        # Создаем новую Заявку (Лид) в нашей базе данных
-        Lead.objects.create(
-            bot=bot_instance,
-            customer_name=name,
-            customer_data=full_lead_data,
-            status='Новая'
-        )
+        full_lead_data = (f"Бизнес: {business}\nЗадача: {task}\nЯзык: {'Русский' if lang == 'ru' else 'Тоҷикӣ'}")
+        Lead.objects.create(bot=bot_instance, customer_name=name, customer_data=full_lead_data, status='Новая')
         bot.send_message(user_id, texts[lang]['final_thanks'])
         print(f"New lead from {name} saved to DB.")
-
-    except Bot.DoesNotExist:
-        print(f"CRITICAL ERROR: A bot with the token from settings.py is not registered in the admin panel!")
-        bot.send_message(user_id, "Произошла системная ошибка. Пожалуйста, попробуйте позже.")
     except Exception as e:
         print(f"CRITICAL ERROR during lead saving: {e}")
         bot.send_message(user_id, "Произошла системная ошибка. Пожалуйста, попробуйте позже.")
-    
     del user_data[user_id]
 
-
-# --- WEBHOOK-ОБРАБОТЧИК (Остается без изменений) ---
 @csrf_exempt
 def telegram_webhook(request):
     if request.headers.get('content-type') == 'application/json':

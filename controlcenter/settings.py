@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-your-temp-secret-key-for-local-dev'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 # Временно разрешаем все хосты. Для "боевого" сервера укажем конкретный.
 ALLOWED_HOSTS = ['tajbot-control-center-production.up.railway.app']

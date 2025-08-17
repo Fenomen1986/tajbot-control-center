@@ -12,8 +12,7 @@ SECRET_KEY = 'django-insecure-your-temp-secret-key-for-local-dev'
 DEBUG = True
 
 # Временно разрешаем все хосты. Для "боевого" сервера укажем конкретный.
-ALLOWED_HOSTS = ['*']
-
+ALLOWED_HOSTS = ['tajbot-control-center-production.up.railway.app']
 
 # Application definition
 INSTALLED_APPS = [
@@ -29,6 +28,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',

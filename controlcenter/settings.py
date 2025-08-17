@@ -107,5 +107,5 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Добавим токен для защиты нашего API
 # Вы должны будете сгенерировать сложный, случайный токен и хранить его в секрете.
-API_AUTH_TOKEN = '''"KF_t)pn5"u]7mw7s9f*p'jgTOTTv1t`NT09N0[r>Y/Uk<91rG`'''
+API_AUTH_TOKEN = '''"BHEw0pU7fg4T3kN0bUjIIG9kezk7KOaV5eqyGSaduUMdwNnsuA`'''
 

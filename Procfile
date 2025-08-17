@@ -1,1 +1,0 @@
-web: gunicorn controlcenter.wsgi --log-file -

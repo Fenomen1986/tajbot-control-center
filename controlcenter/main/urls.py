@@ -1,8 +1,10 @@
-from django.urls import path
-from django.conf import settings
-from .views import telegram_webhook
+from django.contrib import admin
+from django.urls import path, include
+# --- ИЗМЕНЕНИЕ ---
+from controlcenter.main.admin import site as main_admin_site
 
 urlpatterns = [
-    # Создаем секретный адрес, который знает только Telegram
-    path(f'webhook/{settings.TELEGRAM_BOT_TOKEN}/', telegram_webhook, name='telegram_webhook'),
+    # Заменяем стандартный admin.site на наш
+    path('admin/', main_admin_site.urls),
+    path('api/', include('controlcenter.main.urls')),
 ]

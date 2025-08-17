@@ -108,4 +108,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Добавим токен для защиты нашего API
 # Вы должны будете сгенерировать сложный, случайный токен и хранить его в секрете.
 API_AUTH_TOKEN = '''"BHEw0pU7fg4T3kN0bUjIIG9kezk7KOaV5eqyGSaduUMdwNnsuA`'''
+# Токен нашего Telegram-бота от BotFather
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 

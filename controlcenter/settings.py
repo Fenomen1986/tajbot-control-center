@@ -23,8 +23,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    # Наше основное приложение
-    'controlcenter.main',
+    # Вот полный и правильный путь к конфигурации нашего приложения
+    'controlcenter.main.apps.MainConfig',
 ]
 
 MIDDLEWARE = [

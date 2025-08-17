@@ -64,10 +64,9 @@ WSGI_APPLICATION = 'controlcenter.wsgi.application'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 # Начинаем с простой SQLite базы данных.
 DATABASES = {
-    DATABASES = {
     'default': dj_database_url.config(conn_max_age=600, ssl_require=False)
 }
-}
+
 
 
 # Password validation

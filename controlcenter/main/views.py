@@ -42,8 +42,9 @@ texts = {
             "🔹 *'Профи' (от 4000 сомони):* Сложный бот с интеграцией с вашей CRM-системой или базой данных."
         ),
         'ask_name': "Отлично! Как я могу к вам обращаться?",
-        'ask_business': "Приятно познакомиться, {}!\nРасскажите коротко о вашем бизнесе (например, 'кафе', 'магазин').",
-        'ask_task': "Спасибо! Какую главную задачу вы бы хотели поручить боту?",
+        'ask_phone': "Приятно познакомиться, {}! Теперь, пожалуйста, нажмите кнопку ниже, чтобы поделиться вашим номером телефона. Это нужно для связи.",
+        'ask_business': "Спасибо! Расскажите коротко о вашем бизнесе (например, 'кафе', 'магазин').",
+        'ask_task': "Понял. Какую главную задачу вы бы хотели поручить боту?",
         'final_thanks': "Превосходно! Спасибо за ответы. Ваша заявка сохранена. Наш руководитель скоро свяжется с вами.",
         'error_message': "Произошла системная ошибка. Пожалуйста, попробуйте позже."
     },
@@ -54,12 +55,13 @@ texts = {
         'menu_see_example': "Намунаи корро дидан",
         'menu_discuss_project': "Лоиҳаи худро муҳокима кардан",
         'menu_prices': "Нархҳои тахминиро фаҳмидан",
-        'reply_what_bots_can_do': "...",
-        'reply_see_example': "...",
-        'reply_prices': "...",
+        'reply_what_bots_can_do': "...", # Перевод
+        'reply_see_example': "...", # Перевод
+        'reply_prices': "...", # Перевод
         'ask_name': "Олӣ! Ба шумо чӣ тавр муроҷиат кунам?",
-        'ask_business': "Аз шиносоӣ бо шумо шодам, {}!\nДар бораи тиҷорати худ мухтасар нақл кунед.",
-        'ask_task': "Ташаккур! Кадом вазифаи асосиро ба бот супоридан мехоҳед?",
+        'ask_phone': "Аз шиносоӣ бо шумо шодам, {}! Акнун, лутфан, тугмаи зеринро пахш кунед, то рақами телефони худро ирсол намоед. Ин барои алоқа зарур аст.",
+        'ask_business': "Ташаккур! Дар бораи тиҷорати худ мухтасар нақл кунед (масалан, 'қаҳвахона', 'мағоза').",
+        'ask_task': "Фаҳмо. Кадом вазифаи асосиро ба бот супоридан мехоҳед?",
         'final_thanks': "Беҳтарин! Ташаккур барои ҷавобҳо. Дархости шумо сабт шуд. Роҳбари мо ба зудӣ бо шумо дар тамос хоҳад шуд.",
         'error_message': "Хатогии системавӣ рух дод. Лутфан, дертар кӯшиш кунед."
     }
@@ -92,7 +94,7 @@ def handle_language_selection(call):
     )
     bot.send_message(user_id, texts[lang]['menu_prompt'], reply_markup=markup)
 
-@bot.message_handler(func=lambda message: True)
+@bot.message_handler(content_types=['text'])
 def handle_text(message):
     user_id = message.chat.id
     text = message.text
@@ -114,7 +116,20 @@ def process_name_step(message):
     user_id = message.chat.id
     user_data[user_id]['name'] = message.text
     lang = user_data[user_id]['lang']
-    msg = bot.send_message(user_id, texts[lang]['ask_business'].format(message.text))
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    btn_phone = types.KeyboardButton(text="📞 Отправить мой номер" if lang == 'ru' else "📞 Рақами маро ирсол кунед", request_contact=True)
+    markup.add(btn_phone)
+    msg = bot.send_message(user_id, texts[lang]['ask_phone'].format(message.text), reply_markup=markup)
+    bot.register_next_step_handler(msg, process_phone_step)
+
+def process_phone_step(message):
+    user_id = message.chat.id
+    lang = user_data[user_id]['lang']
+    if message.contact is not None:
+        user_data[user_id]['phone'] = message.contact.phone_number
+    else:
+        user_data[user_id]['phone'] = message.text
+    msg = bot.send_message(user_id, texts[lang]['ask_business'], reply_markup=types.ReplyKeyboardRemove())
     bot.register_next_step_handler(msg, process_business_step)
 
 def process_business_step(message):
@@ -128,46 +143,27 @@ def process_task_step(message):
     user_id = message.chat.id
     user_data[user_id]['task'] = message.text
     lang = user_data[user_id]['lang']
-    
-    # --- УЛУЧШЕННЫЙ БЛОК ИНТЕГРАЦИИ С БД ---
     try:
         token_from_settings = settings.TELEGRAM_BOT_TOKEN
         if not token_from_settings:
             raise ValueError("TELEGRAM_BOT_TOKEN is not set in environment variables.")
-        
         bot_instance = Bot.objects.get(token=token_from_settings)
-        
         name = user_data[user_id].get('name', 'Не указано')
+        phone = user_data[user_id].get('phone', 'Не указан')
         business = user_data[user_id].get('business', 'Не указано')
         task = user_data[user_id].get('task', 'Не указано')
-        
-        full_lead_data = (f"Бизнес: {business}\nЗадача: {task}\nЯзык: {'Русский' if lang == 'ru' else 'Тоҷикӣ'}")
-        
-        Lead.objects.create(
-            bot=bot_instance,
-            customer_name=name,
-            customer_data=full_lead_data,
-            status='Новая'
-        )
+        full_lead_data = (f"📞 Телефон: {phone}\n🏢 Бизнес: {business}\n📝 Задача: {task}\n🌐 Язык: {'Русский' if lang == 'ru' else 'Тоҷикӣ'}")
+        Lead.objects.create(bot=bot_instance, customer_name=name, customer_data=full_lead_data, status='Новая')
         bot.send_message(user_id, texts[lang]['final_thanks'])
-        print(f"✅ New lead from '{name}' saved to DB.")
-
-        # --- НОВЫЙ КОД ДЛЯ ОТПРАВКИ УВЕДОМЛЕНИЯ АДМИНУ ---
+        print(f"✅ New lead from '{name}' ({phone}) saved to DB.")
         try:
             if settings.NOTIFIER_BOT_TOKEN and settings.ADMIN_CHAT_ID:
                 notifier_bot = telebot.TeleBot(settings.NOTIFIER_BOT_TOKEN)
-                notification_text = (
-                    f"🔥 **Новая заявка в CRM!**\n\n"
-                    f"👤 **От:** {name}\n"
-                    f"🏢 **Бизнес:** {business}\n"
-                    f"📝 **Задача:** {task}"
-                )
+                notification_text = (f"🔥 **Новая заявка в CRM!**\n\n👤 **От:** {name}\n📞 **Телефон:** {phone}\n🏢 **Бизнес:** {business}\n📝 **Задача:** {task}")
                 notifier_bot.send_message(settings.ADMIN_CHAT_ID, notification_text, parse_mode="Markdown")
                 print("✅ Admin notification sent successfully.")
         except Exception as notify_error:
             print(f"🛑 ERROR sending admin notification: {notify_error}")
-        # --- КОНЕЦ НОВОГО БЛОКА ---
-
     except Bot.DoesNotExist:
         error_message = f"🛑 CRITICAL ERROR: A bot with the token '{settings.TELEGRAM_BOT_TOKEN[:15]}...' is NOT registered in the admin panel!"
         print(error_message)
@@ -176,9 +172,7 @@ def process_task_step(message):
         error_message = f"🛑 CRITICAL ERROR during lead saving: {e}"
         print(error_message)
         bot.send_message(user_id, texts[lang]['error_message'])
-    
     del user_data[user_id]
-
 
 @csrf_exempt
 def telegram_webhook(request):

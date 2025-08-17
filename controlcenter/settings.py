@@ -9,11 +9,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-your-temp-secret-key-for-local-dev'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 # Временно разрешаем все хосты. Для "боевого" сервера укажем конкретный.
 ALLOWED_HOSTS = ['tajbot-control-center-production.up.railway.app']
 
+CSRF_TRUSTED_ORIGINS = ['https://tajbot-control-center-production.up.railway.app']
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',

@@ -15,12 +15,10 @@ texts = {
     'ru': {
         'welcome': "Здравствуйте!\nДля продолжения, пожалуйста, выберите язык общения.",
         'menu_prompt': "Я ваш цифровой ассистент. Чем могу помочь?",
-        # --- Кнопки меню ---
         'menu_what_bots_can_do': "Узнать, что умеют чат-боты",
         'menu_see_example': "Посмотреть пример работы",
         'menu_discuss_project': "Обсудить мой проект",
         'menu_prices': "Узнать примерные цены",
-        # --- Ответы на кнопки меню ---
         'reply_what_bots_can_do': (
             "Наши чат-боты — это полноценные виртуальные сотрудники, которые умеют:\n\n"
             "✅ *Принимать заказы:* для ресторанов, кафе и магазинов.\n"
@@ -43,13 +41,12 @@ texts = {
             "🔹 *'Бизнес' (2000 - 4000 сомони):* Бот с функцией онлайн-записи или приема простых заказов.\n\n"
             "🔹 *'Профи' (от 4000 сомони):* Сложный бот с интеграцией с вашей CRM-системой или базой данных."
         ),
-        # --- Сбор заявки ---
         'ask_name': "Отлично! Как я могу к вам обращаться?",
         'ask_business': "Приятно познакомиться, {}!\nРасскажите коротко о вашем бизнесе (например, 'кафе', 'магазин').",
         'ask_task': "Спасибо! Какую главную задачу вы бы хотели поручить боту?",
         'final_thanks': "Превосходно! Спасибо за ответы. Ваша заявка сохранена. Наш руководитель скоро свяжется с вами.",
+        'error_message': "Произошла системная ошибка. Пожалуйста, попробуйте позже."
     },
-    # --- Таджикские тексты (можно дополнить по аналогии) ---
     'tj': {
         'welcome': "Ассалому алейкум!\nБарои идома, лутфан забони муоширатро интихоб кунед.",
         'menu_prompt': "Ман ёрдамчии рақамии шумо. Чӣ хизмат карда метавонам?",
@@ -64,11 +61,9 @@ texts = {
         'ask_business': "Аз шиносоӣ бо шумо шодам, {}!\nДар бораи тиҷорати худ мухтасар нақл кунед.",
         'ask_task': "Ташаккур! Кадом вазифаи асосиро ба бот супоридан мехоҳед?",
         'final_thanks': "Беҳтарин! Ташаккур барои ҷавобҳо. Дархости шумо сабт шуд. Роҳбари мо ба зудӣ бо шумо дар тамос хоҳад шуд.",
+        'error_message': "Хатогии системавӣ рух дод. Лутфан, дертар кӯшиш кунед."
     }
 }
-
-
-# --- ОБРАБОТЧИКИ ---
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -88,8 +83,6 @@ def handle_language_selection(call):
     user_data[user_id] = {'lang': lang}
     bot.answer_callback_query(call.id)
     bot.delete_message(chat_id=user_id, message_id=call.message.message_id)
-    
-    # --- ИСПРАВЛЕННЫЙ БЛОК СОЗДАНИЯ МЕНЮ ---
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
     markup.add(
         types.KeyboardButton(texts[lang]['menu_what_bots_can_do']),
@@ -97,7 +90,6 @@ def handle_language_selection(call):
         types.KeyboardButton(texts[lang]['menu_prices']),
         types.KeyboardButton(texts[lang]['menu_discuss_project'])
     )
-    # ----------------------------------------
     bot.send_message(user_id, texts[lang]['menu_prompt'], reply_markup=markup)
 
 @bot.message_handler(func=lambda message: True)
@@ -108,8 +100,6 @@ def handle_text(message):
         send_welcome(message)
         return
     lang = user_data[user_id]['lang']
-    
-    # --- ИСПРАВЛЕННЫЙ БЛОК ОБРАБОТКИ МЕНЮ ---
     if text == texts[lang]['menu_what_bots_can_do']:
         bot.send_message(user_id, texts[lang]['reply_what_bots_can_do'], parse_mode="Markdown")
     elif text == texts[lang]['menu_see_example']:
@@ -119,10 +109,8 @@ def handle_text(message):
     elif text == texts[lang]['menu_discuss_project']:
         msg = bot.send_message(user_id, texts[lang]['ask_name'], reply_markup=types.ReplyKeyboardRemove())
         bot.register_next_step_handler(msg, process_name_step)
-    # ----------------------------------------
 
 def process_name_step(message):
-    # (Этот и следующие шаги остаются без изменений)
     user_id = message.chat.id
     user_data[user_id]['name'] = message.text
     lang = user_data[user_id]['lang']
@@ -140,19 +128,41 @@ def process_task_step(message):
     user_id = message.chat.id
     user_data[user_id]['task'] = message.text
     lang = user_data[user_id]['lang']
+    
+    # --- УЛУЧШЕННЫЙ БЛОК ИНТЕГРАЦИИ С БД ---
     try:
-        bot_instance = Bot.objects.get(token=settings.TELEGRAM_BOT_TOKEN)
+        token_from_settings = settings.TELEGRAM_BOT_TOKEN
+        if not token_from_settings:
+            raise ValueError("TELEGRAM_BOT_TOKEN is not set in environment variables.")
+        
+        bot_instance = Bot.objects.get(token=token_from_settings)
+        
         name = user_data[user_id].get('name', 'Не указано')
         business = user_data[user_id].get('business', 'Не указано')
         task = user_data[user_id].get('task', 'Не указано')
+        
         full_lead_data = (f"Бизнес: {business}\nЗадача: {task}\nЯзык: {'Русский' if lang == 'ru' else 'Тоҷикӣ'}")
-        Lead.objects.create(bot=bot_instance, customer_name=name, customer_data=full_lead_data, status='Новая')
+        
+        Lead.objects.create(
+            bot=bot_instance,
+            customer_name=name,
+            customer_data=full_lead_data,
+            status='Новая'
+        )
         bot.send_message(user_id, texts[lang]['final_thanks'])
-        print(f"New lead from {name} saved to DB.")
+        print(f"✅ New lead from '{name}' saved to DB.")
+
+    except Bot.DoesNotExist:
+        error_message = f"🛑 CRITICAL ERROR: A bot with the token '{settings.TELEGRAM_BOT_TOKEN[:15]}...' is NOT registered in the admin panel!"
+        print(error_message)
+        bot.send_message(user_id, texts[lang]['error_message'])
     except Exception as e:
-        print(f"CRITICAL ERROR during lead saving: {e}")
-        bot.send_message(user_id, "Произошла системная ошибка. Пожалуйста, попробуйте позже.")
+        error_message = f"🛑 CRITICAL ERROR during lead saving: {e}"
+        print(error_message)
+        bot.send_message(user_id, texts[lang]['error_message'])
+    
     del user_data[user_id]
+
 
 @csrf_exempt
 def telegram_webhook(request):

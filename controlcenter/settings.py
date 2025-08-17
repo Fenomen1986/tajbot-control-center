@@ -110,4 +110,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 API_AUTH_TOKEN = '''"BHEw0pU7fg4T3kN0bUjIIG9kezk7KOaV5eqyGSaduUMdwNnsuA`'''
 # Токен нашего Telegram-бота от BotFather
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+# --- НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ УВЕДОМЛЕНИЙ ---
+NOTIFIER_BOT_TOKEN = os.environ.get('NOTIFIER_BOT_TOKEN')
+ADMIN_CHAT_ID = os.environ.get('ADMIN_CHAT_ID')
 

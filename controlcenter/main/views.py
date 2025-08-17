@@ -152,6 +152,22 @@ def process_task_step(message):
         bot.send_message(user_id, texts[lang]['final_thanks'])
         print(f"✅ New lead from '{name}' saved to DB.")
 
+        # --- НОВЫЙ КОД ДЛЯ ОТПРАВКИ УВЕДОМЛЕНИЯ АДМИНУ ---
+        try:
+            if settings.NOTIFIER_BOT_TOKEN and settings.ADMIN_CHAT_ID:
+                notifier_bot = telebot.TeleBot(settings.NOTIFIER_BOT_TOKEN)
+                notification_text = (
+                    f"🔥 **Новая заявка в CRM!**\n\n"
+                    f"👤 **От:** {name}\n"
+                    f"🏢 **Бизнес:** {business}\n"
+                    f"📝 **Задача:** {task}"
+                )
+                notifier_bot.send_message(settings.ADMIN_CHAT_ID, notification_text, parse_mode="Markdown")
+                print("✅ Admin notification sent successfully.")
+        except Exception as notify_error:
+            print(f"🛑 ERROR sending admin notification: {notify_error}")
+        # --- КОНЕЦ НОВОГО БЛОКА ---
+
     except Bot.DoesNotExist:
         error_message = f"🛑 CRITICAL ERROR: A bot with the token '{settings.TELEGRAM_BOT_TOKEN[:15]}...' is NOT registered in the admin panel!"
         print(error_message)

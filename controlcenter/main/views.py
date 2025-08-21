@@ -1,14 +1,63 @@
 import json
 import telebot
+import threading
 from telebot import types
+from telebot.storage import StateStorage
 from django.http import HttpResponse, HttpResponseForbidden
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from .models import Bot, Lead
 
+# --- Хранилище состояния в сессии Django ---
+_thread_locals = threading.local()
+
+class DjangoSessionStateStorage(StateStorage):
+    def __init__(self):
+        self.prefix = 'telebot_'
+
+    def get_key(self, chat_id, user_id, key_type):
+        return f"{self.prefix}{key_type}_{chat_id}_{user_id}"
+
+    @property
+    def request(self):
+        return getattr(_thread_locals, 'request', None)
+
+    def get_state(self, bot, chat_id, user_id):
+        if self.request:
+            key = self.get_key(chat_id, user_id, 'state')
+            return self.request.session.get(key)
+        return None
+
+    def set_state(self, bot, chat_id, user_id, state):
+        if self.request:
+            key = self.get_key(chat_id, user_id, 'state')
+            self.request.session[key] = str(state)
+            return True
+        return False
+
+    def delete_state(self, bot, chat_id, user_id):
+        if self.request:
+            key = self.get_key(chat_id, user_id, 'state')
+            if key in self.request.session:
+                del self.request.session[key]
+                return True
+        return False
+
+    def get_data(self, bot, chat_id, user_id):
+        if self.request:
+            key = self.get_key(chat_id, user_id, 'data')
+            return self.request.session.get(key, {})
+        return {}
+
+    def set_data(self, bot, chat_id, user_id, data):
+        if self.request:
+            key = self.get_key(chat_id, user_id, 'data')
+            self.request.session[key] = data
+            return True
+        return False
+
 # --- Инициализация ---
-bot = telebot.TeleBot(settings.TELEGRAM_BOT_TOKEN, threaded=False)
-user_data = {}
+bot = telebot.TeleBot(settings.TELEGRAM_BOT_TOKEN, threaded=False, state_storage=DjangoSessionStateStorage())
 
 # --- Тексты на двух языках (Полная версия) ---
 texts = {
@@ -70,7 +119,8 @@ texts = {
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.chat.id
-    user_data[user_id] = {}
+    chat_id = message.chat.id
+    bot.delete_state(user_id, chat_id) # Сбрасываем состояние и данные
     markup = types.InlineKeyboardMarkup(row_width=2)
     btn_tj = types.InlineKeyboardButton("Тоҷикӣ", callback_data='lang_tj')
     btn_ru = types.InlineKeyboardButton("Русский", callback_data='lang_ru')
@@ -81,8 +131,9 @@ def send_welcome(message):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('lang_'))
 def handle_language_selection(call):
     user_id = call.message.chat.id
+    chat_id = call.message.chat.id
     lang = call.data.split('_')[1]
-    user_data[user_id] = {'lang': lang}
+    bot.add_data(user_id, chat_id, lang=lang)
     bot.answer_callback_query(call.id)
     bot.delete_message(chat_id=user_id, message_id=call.message.message_id)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
@@ -97,11 +148,13 @@ def handle_language_selection(call):
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
     user_id = message.chat.id
+    chat_id = message.chat.id
     text = message.text
-    if user_id not in user_data or 'lang' not in user_data[user_id]:
+    data = bot.retrieve_data(user_id, chat_id)
+    lang = data.get('lang')
+    if not lang:
         send_welcome(message)
         return
-    lang = user_data[user_id]['lang']
     if text == texts[lang]['menu_what_bots_can_do']:
         bot.send_message(user_id, texts[lang]['reply_what_bots_can_do'], parse_mode="Markdown")
     elif text == texts[lang]['menu_see_example']:
@@ -114,8 +167,10 @@ def handle_text(message):
 
 def process_name_step(message):
     user_id = message.chat.id
-    user_data[user_id]['name'] = message.text
-    lang = user_data[user_id]['lang']
+    chat_id = message.chat.id
+    data = bot.retrieve_data(user_id, chat_id)
+    lang = data.get('lang')
+    bot.add_data(user_id, chat_id, name=message.text)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     btn_phone = types.KeyboardButton(text="📞 Отправить мой номер" if lang == 'ru' else "📞 Рақами маро ирсол кунед", request_contact=True)
     markup.add(btn_phone)
@@ -124,34 +179,38 @@ def process_name_step(message):
 
 def process_phone_step(message):
     user_id = message.chat.id
-    lang = user_data[user_id]['lang']
-    if message.contact is not None:
-        user_data[user_id]['phone'] = message.contact.phone_number
-    else:
-        user_data[user_id]['phone'] = message.text
+    chat_id = message.chat.id
+    data = bot.retrieve_data(user_id, chat_id)
+    lang = data.get('lang')
+    phone_number = message.contact.phone_number if message.contact is not None else message.text
+    bot.add_data(user_id, chat_id, phone=phone_number)
     msg = bot.send_message(user_id, texts[lang]['ask_business'], reply_markup=types.ReplyKeyboardRemove())
     bot.register_next_step_handler(msg, process_business_step)
 
 def process_business_step(message):
     user_id = message.chat.id
-    user_data[user_id]['business'] = message.text
-    lang = user_data[user_id]['lang']
+    chat_id = message.chat.id
+    data = bot.retrieve_data(user_id, chat_id)
+    lang = data.get('lang')
+    bot.add_data(user_id, chat_id, business=message.text)
     msg = bot.send_message(user_id, texts[lang]['ask_task'])
     bot.register_next_step_handler(msg, process_task_step)
 
 def process_task_step(message):
     user_id = message.chat.id
-    user_data[user_id]['task'] = message.text
-    lang = user_data[user_id]['lang']
+    chat_id = message.chat.id
+    bot.add_data(user_id, chat_id, task=message.text)
+    data = bot.retrieve_data(user_id, chat_id)
+    lang = data.get('lang')
     try:
         token_from_settings = settings.TELEGRAM_BOT_TOKEN
         if not token_from_settings:
             raise ValueError("TELEGRAM_BOT_TOKEN is not set in environment variables.")
         bot_instance = Bot.objects.get(token=token_from_settings)
-        name = user_data[user_id].get('name', 'Не указано')
-        phone = user_data[user_id].get('phone', 'Не указан')
-        business = user_data[user_id].get('business', 'Не указано')
-        task = user_data[user_id].get('task', 'Не указано')
+        name = data.get('name', 'Не указано')
+        phone = data.get('phone', 'Не указан')
+        business = data.get('business', 'Не указано')
+        task = data.get('task', 'Не указано')
         full_lead_data = (f"📞 Телефон: {phone}\n🏢 Бизнес: {business}\n📝 Задача: {task}\n🌐 Язык: {'Русский' if lang == 'ru' else 'Тоҷикӣ'}")
         Lead.objects.create(bot=bot_instance, customer_name=name, customer_data=full_lead_data, status='Новая')
         bot.send_message(user_id, texts[lang]['final_thanks'])
@@ -172,14 +231,20 @@ def process_task_step(message):
         error_message = f"🛑 CRITICAL ERROR during lead saving: {e}"
         print(error_message)
         bot.send_message(user_id, texts[lang]['error_message'])
-    del user_data[user_id]
+    finally:
+        bot.delete_state(user_id, chat_id)
 
 @csrf_exempt
 def telegram_webhook(request):
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.body.decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return HttpResponse('OK', status=200)
-    else:
-        return HttpResponseForbidden('Forbidden')
+    _thread_locals.request = request
+    try:
+        if request.headers.get('content-type') == 'application/json':
+            json_string = request.body.decode('utf-8')
+            update = telebot.types.Update.de_json(json_string)
+            bot.process_new_updates([update])
+            return HttpResponse('OK', status=200)
+        else:
+            return HttpResponseForbidden('Forbidden')
+    finally:
+        if hasattr(_thread_locals, 'request'):
+            del _thread_locals.request
